@@ -163,9 +163,11 @@ exports.UnboundedQueue = UnboundedQueue;
     let queue = new UnboundedQueue();
     let p1 = new Publisher("P1");
     let s1 = new Subscriber("S1");
+    let s2 = new Subscriber("S2");
     s1.read(queue);
+    s2.read(queue);
     for (let i = 0; i < 5; i++) {
-        p1.add(queue, new Message("ola"));
+        p1.add(queue, new Message("ola " + i));
     }
     //process.exit();
 }))();

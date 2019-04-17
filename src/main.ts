@@ -161,9 +161,7 @@ class Subscriber {
 
     }
 }
-/**
- * 1st Scenario
- */
+
 export class UnboundedQueue implements AsyncQueue<Message> {
     queue: Message[] = [];
     resolves: Array<(value?: Message | PromiseLike<Message>) => void> = [];
@@ -185,14 +183,44 @@ export class UnboundedQueue implements AsyncQueue<Message> {
     }
 }
 
+/**
+ * 1st Scenario
+ */
+
+// (async () => {
+//     let queue: UnboundedQueue = new UnboundedQueue();
+//     let p1: Publisher = new Publisher("P1");
+//     let s1: Subscriber = new Subscriber("S1");
+//     s1.read(queue);
+//     for(let i = 0; i < 5; i++) {
+//         p1.add(queue, new Message("ola " + i));
+//     }
+    
+//     //process.exit();
+// })()
+
+/**
+ * end of 1st Scenario
+ */
+
+
+/**
+ * 2nd Scenario
+ */
 (async () => {
     let queue: UnboundedQueue = new UnboundedQueue();
     let p1: Publisher = new Publisher("P1");
     let s1: Subscriber = new Subscriber("S1");
+    let s2: Subscriber = new Subscriber("S2");
     s1.read(queue);
+    s2.read(queue);
     for(let i = 0; i < 5; i++) {
-        p1.add(queue, new Message("ola"));
+        p1.add(queue, new Message("ola " + i));
     }
     
     //process.exit();
 })()
+
+/**
+ * end of 2nd Scenario
+ */
