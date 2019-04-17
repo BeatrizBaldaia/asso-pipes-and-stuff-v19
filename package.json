@@ -11,7 +11,7 @@
         "is-array-sorted": "^1.0.0"
     },
     "devDependencies": {
-        "@types/node": "^11.13.0",
+        "@types/node": "^11.13.4",
         "browserify": "^16.2.2",
         "npm": "^6.0.1",
         "opn-cli": "^4.0.0",
@@ -20,7 +20,8 @@
     },
     "scripts": {
         "build": "tsc",
-        "start": "tsc; node build/main.js",
+        "start": "tsc & node build/main.js",
+        "test1": "tsc & node build/test1.js",
         "asyncqueue": "tsc; node build/asyncqueue.js"
     }
 }

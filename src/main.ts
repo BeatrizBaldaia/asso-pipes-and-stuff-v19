@@ -1,11 +1,13 @@
 import { readFileSync, fstat } from 'fs'
+import { resolveSoa } from 'dns';
+import { RSA_PKCS1_OAEP_PADDING } from 'constants';
 
 interface Filter {
     next(): Message
     hasNext(): Boolean
 }
 
-class Message {
+export class Message {
     constructor(public readonly value: any) { }
     static none = new Message(null)
 }
@@ -29,7 +31,7 @@ class Message {
 class ToUpperCase implements Filter {
     constructor(public readonly f: Filter) { }
     next(): Message {
-       return new Message(this.f.next().value.toUpperCase())
+        return new Message(this.f.next().value.toUpperCase())
     }
 
     hasNext(): Boolean {
@@ -67,13 +69,13 @@ class FileLineReader implements Filter {
 class SlowFileLineReader extends FileLineReader {
     constructor(public readonly fileName: string) {
         super(fileName)
-    }  
+    }
 
     delay(millis: number) {
         const date = new Date()
         let curDate = null
-        do { 
-            curDate = new Date() 
+        do {
+            curDate = new Date()
         } while (curDate.getTime() - date.getTime() < millis)
     }
 
@@ -87,7 +89,7 @@ class Join implements Filter {
     fs: Filter[]
     currentFilter = 0
 
-    constructor(...fs: Filter[]) { 
+    constructor(...fs: Filter[]) {
         this.fs = fs
     }
 
@@ -104,14 +106,93 @@ class Join implements Filter {
 }
 
 function iterate(f: Filter) {
-    while(f.hasNext()) { 
+    while (f.hasNext()) {
         f.next()
-    }  
+    }
 }
 
-const f1 = new SlowFileLineReader('./best15.txt')
-const f2 = new FileLineReader('./best-mieic.txt')
+// const f1 = new SlowFileLineReader('./best15.txt')
+// const f2 = new FileLineReader('./best-mieic.txt')
 
-const r1 = new Writer(new ToUpperCase(new Join(f1, f2)))
+// const r1 = new Writer(new ToUpperCase(new Join(f1, f2)))
 
-iterate(r1)
+// iterate(r1)
+
+setInterval(() => { }, 1000); // run program until explicit exit
+/**
+ * asynchronous unlimited FIFO
+ * enqueue = push = add to the queue
+ * dequeue = pop = remove from queue
+ */
+interface AsyncQueue<T> {
+    enqueue(elem: T): void
+    dequeue(): Promise<T>
+}
+
+interface AsyncSemaphore {
+    signal(): void
+    wait(): Promise<void>
+}
+/**
+ * asynchronous bounded FIFO, that blocks enqueuing() when it's full, and blocks dequeuing() when it's empty
+ */
+interface BoundedAsyncQueue<T> {
+    enqueue(elem: T): Promise<void>
+    dequeue(): Promise<T>
+}
+
+class Publisher {
+    constructor(public name: string) { }
+    add(queue: AsyncQueue<Message>, msg: Message): void {
+        queue.enqueue(msg);
+        console.log("Publisher %s is adding message %s to queue...", this.name, msg.value);
+    }
+}
+
+class Subscriber {
+    constructor(public name: string) { }
+    async read(queue: AsyncQueue<Message>) {
+        while (true) {
+            let msg = await queue.dequeue().catch((err) => { console.log(err); });
+            if (msg) {
+                console.log("Subscriber %s is removing message %s from queue...", this.name, msg.value); // Success!
+            }
+        }
+
+    }
+}
+/**
+ * 1st Scenario
+ */
+export class UnboundedQueue implements AsyncQueue<Message> {
+    queue: Message[] = [];
+    resolves: Array<(value?: Message | PromiseLike<Message>) => void> = [];
+    enqueue(msg: Message): void {
+        if (this.resolves.length) {
+            this.resolves.shift()(msg);
+        } else {
+            this.queue.push(msg);
+        }
+    }
+    dequeue(): Promise<Message> {
+        return new Promise<Message>((resolve) => {
+            if (this.queue.length) {
+                resolve(this.queue.shift());
+            } else {
+                this.resolves.push(resolve);
+            }
+        });
+    }
+}
+
+(async () => {
+    let queue: UnboundedQueue = new UnboundedQueue();
+    let p1: Publisher = new Publisher("P1");
+    let s1: Subscriber = new Subscriber("S1");
+    s1.read(queue);
+    for(let i = 0; i < 5; i++) {
+        p1.add(queue, new Message("ola"));
+    }
+    
+    //process.exit();
+})()
