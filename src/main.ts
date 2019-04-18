@@ -149,7 +149,7 @@ class Publisher {
     }
 }
 
-class Subscriber {
+class Subscriber implements IObserver{
     constructor(public name: string) { }
     async read(queue: AsyncQueue<Message>) {
         while (true) {
@@ -158,8 +158,12 @@ class Subscriber {
                 console.log("Subscriber %s is removing message %s from queue...", this.name, msg.value); // Success!
             }
         }
-
     }
+    //3rd Scenario
+    async receive(msg: Message) {
+        console.log("Subscriber %s is receiving message %s from Ventilator...", this.name, msg.value);
+    }
+
 }
 
 export class UnboundedQueue implements AsyncQueue<Message> {
@@ -167,7 +171,7 @@ export class UnboundedQueue implements AsyncQueue<Message> {
     resolves: Array<(value?: Message | PromiseLike<Message>) => void> = [];
     enqueue(msg: Message): void {
         if (this.resolves.length) {
-            this.resolves.shift()(msg);
+            this.resolves.shift()(msg); //??
         } else {
             this.queue.push(msg);
         }
@@ -187,17 +191,17 @@ export class UnboundedQueue implements AsyncQueue<Message> {
  * 1st Scenario
  */
 
-// (async () => {
-//     let queue: UnboundedQueue = new UnboundedQueue();
-//     let p1: Publisher = new Publisher("P1");
-//     let s1: Subscriber = new Subscriber("S1");
-//     s1.read(queue);
-//     for(let i = 0; i < 5; i++) {
-//         p1.add(queue, new Message("ola " + i));
-//     }
+/*(async () => {
+     let queue: UnboundedQueue = new UnboundedQueue();
+     let p1: Publisher = new Publisher("P1");
+     let s1: Subscriber = new Subscriber("S1");
+     s1.read(queue);
+     for(let i = 0; i < 5; i++) {
+         p1.add(queue, new Message("ola " + i));
+     }
     
-//     //process.exit();
-// })()
+     //process.exit();
+})()*/
 
 /**
  * end of 1st Scenario
@@ -207,7 +211,7 @@ export class UnboundedQueue implements AsyncQueue<Message> {
 /**
  * 2nd Scenario
  */
-(async () => {
+/*(async () => {
     let queue: UnboundedQueue = new UnboundedQueue();
     let p1: Publisher = new Publisher("P1");
     let s1: Subscriber = new Subscriber("S1");
@@ -219,8 +223,59 @@ export class UnboundedQueue implements AsyncQueue<Message> {
     }
     
     //process.exit();
-})()
+})()*/
 
 /**
  * end of 2nd Scenario
  */
+
+
+ /**
+ * 3rd Scenario
+ */
+
+export interface IObserver{
+    receive(msg: Message):void;
+}
+
+ class Ventilator {
+    private observers: IObserver[]
+    constructor(public name: string) { this.observers = [] }
+    addObserver(ob: IObserver) { this.observers.push(ob)}
+    notifyObservers(msg: Message){
+        this.observers.map((observer) =>  observer.receive(msg));
+    }
+    async read(queue: AsyncQueue<Message>) {
+        while (true) {
+            let msg = await queue.dequeue().catch((err) => { console.log(err); });
+            if (msg) {
+                console.log("Ventilator %s is removing message %s from queue...", this.name, msg.value); // Success!
+                this.notifyObservers(msg);
+            }
+        }
+    }
+}
+
+(async () => {
+    let queue: UnboundedQueue = new UnboundedQueue();
+    let p1: Publisher = new Publisher("P1");
+    let v1: Ventilator = new Ventilator("V1");
+    let s1: Subscriber = new Subscriber("S1");
+    let s2: Subscriber = new Subscriber("S2");
+    let s3: Subscriber = new Subscriber("S3");
+
+    v1.read(queue);
+    v1.addObserver(s1);
+    v1.addObserver(s2);
+    v1.addObserver(s3);
+    for(let i = 0; i < 5; i++) {
+        p1.add(queue, new Message("ola " + i));
+    }
+    
+    //process.exit();
+})()
+
+/**
+ * end of 3rd Scenario
+ */
+

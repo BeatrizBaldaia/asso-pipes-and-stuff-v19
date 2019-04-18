@@ -130,10 +130,13 @@ class Subscriber {
             }
         });
     }
+    //3rd Scenario
+    receive(msg) {
+        return __awaiter(this, void 0, void 0, function* () {
+            console.log("Subscriber %s is receiving message %s from Ventilator...", this.name, msg.value);
+        });
+    }
 }
-/**
- * 1st Scenario
- */
 class UnboundedQueue {
     constructor() {
         this.queue = [];
@@ -141,7 +144,7 @@ class UnboundedQueue {
     }
     enqueue(msg) {
         if (this.resolves.length) {
-            this.resolves.shift()(msg);
+            this.resolves.shift()(msg); //??
         }
         else {
             this.queue.push(msg);
@@ -159,16 +162,44 @@ class UnboundedQueue {
     }
 }
 exports.UnboundedQueue = UnboundedQueue;
+class Ventilator {
+    constructor(name) {
+        this.name = name;
+        this.observers = [];
+    }
+    addObserver(ob) { this.observers.push(ob); }
+    notifyObservers(msg) {
+        this.observers.map((observer) => observer.receive(msg));
+    }
+    read(queue) {
+        return __awaiter(this, void 0, void 0, function* () {
+            while (true) {
+                let msg = yield queue.dequeue().catch((err) => { console.log(err); });
+                if (msg) {
+                    console.log("Ventilator %s is removing message %s from queue...", this.name, msg.value); // Success!
+                    this.notifyObservers(msg);
+                }
+            }
+        });
+    }
+}
 (() => __awaiter(this, void 0, void 0, function* () {
     let queue = new UnboundedQueue();
     let p1 = new Publisher("P1");
+    let v1 = new Ventilator("V1");
     let s1 = new Subscriber("S1");
     let s2 = new Subscriber("S2");
-    s1.read(queue);
-    s2.read(queue);
+    let s3 = new Subscriber("S3");
+    v1.read(queue);
+    v1.addObserver(s1);
+    v1.addObserver(s2);
+    v1.addObserver(s3);
     for (let i = 0; i < 5; i++) {
         p1.add(queue, new Message("ola " + i));
     }
     //process.exit();
 }))();
+/**
+ * end of 3rd Scenario
+ */
 //# sourceMappingURL=main.js.map
