@@ -149,7 +149,7 @@ class Publisher {
     }
 }
 
-class Subscriber implements IObserver{
+class Subscriber implements IObserver {
     constructor(public name: string) { }
     async read(queue: AsyncQueue<Message>) {
         while (true) {
@@ -187,8 +187,10 @@ export class UnboundedQueue implements AsyncQueue<Message> {
     }
 }
 
+
+
 export interface IObserver {
-    receive(msg: Message):void;
+    receive(msg: Message): void;
 }
 
 /**
@@ -286,63 +288,231 @@ export interface IObserver {
  * 4th Scenario
  */
 
-class Registry {
-    private publishers: Publisher[] = [];
-    private subscribers: Subscriber[] = [];
+// class Registry {
+//     private _publishers: Publisher[] = [];
+//     private _subscribers: Subscriber[] = [];
 
-    constructor() {
+//     constructor() {
+//     }
+
+//     public addUser<User>(user: User) {
+//         if (user.constructor.name == "Publisher") 
+//             this._publishers.push(<Publisher><unknown> user);
+//         else
+//             this._subscribers.push(<Subscriber><unknown> user);
+//     }
+
+
+//     public get publishers() : Publisher[] {
+//         return this._publishers
+//     }
+
+//     public get subscribers() : Subscriber[] {
+//         return this._subscribers
+//     }
+// }
+
+export class BoundedQueue implements BoundedAsyncQueue<Message> {
+    queue: Message[] = [];
+    inbound: Array<(value?: void | PromiseLike<void>) => void> = [];//msg a ir para a queue, mas que nao entraram porque nao havia espaco
+    outbound: Array<(value?: Message | PromiseLike<Message>) => void> = [];//pedido de leitura da queue, mas nao ocorrido porque nao havia msg
+
+    constructor(public size: number) { }
+    enqueue(message: Message): Promise<void> {
+        if (this.outbound.length > 0) {
+            this.outbound.shift()(message)
+        } else if (this.queue.length >= this.size) {
+            return new Promise((resolve, _reject) => {
+                this.inbound.push(resolve);
+                this.queue.push(message);
+            });
+        } else {
+            this.queue.push(message)
+        }
     }
-
-    public addUser<User>(user: User) {
-        if (user.constructor.name == "Publisher") 
-            this.publishers.push(<Publisher><unknown> user);
-        else
-            this.subscribers.push(<Subscriber><unknown> user);
-    }
-
-    public getPublishers() {
-        return this.publishers;
-    }
-
-    public getSubscribers() {
-        return this.subscribers;
+    
+    dequeue(): Promise<Message> {
+        return new Promise<Message>((resolve) => {
+            if (this.queue.length) {
+                if(this.inbound.length) {
+                    this.inbound.shift()();
+                }
+                resolve(this.queue.shift());
+            } else {
+                this.outbound.push(resolve);
+            }
+        });
     }
 }
 
+// export class BoundedQueue implements BoundedAsyncQueue<Message> {
+// public data = new Array<Message>()
+// private outWaiting = new Array<(value?: Message | PromiseLike<Message>) => void>()
+// private inWaiting = new Array<(value?: void | PromiseLike<void>) => void>()
+
+// constructor(private bufferSize: number) { }
+
+// enqueue(message: Message): Promise<void> {
+//     if (this.outWaiting.length > 0) {
+//         this.outWaiting.shift()(message)
+//     } else if (this.data.length >= this.bufferSize) {
+//         return new Promise((resolve, _reject) => {
+//             this.inWaiting.push(resolve);
+//             this.data.push(message);
+//         });
+//     } else {
+//         this.data.push(message)
+//     }
+// }
+
+// dequeue(): Promise<Message> {
+//     return new Promise((resolve, _reject) => {
+        
+//             if (this.inWaiting.length > 0) {
+//                 this.inWaiting.shift()();
+//             }
+//             if (this.data.length > 0) {
+//                 resolve(this.data.shift())
+//             } else {
+//                 this.outWaiting.push(resolve)
+//             }
+        
+//     })
+// }
+// }
+
+class BrokerPublisher {
+    private _queue: BoundedQueue;
+    
+    constructor(public name: string, queueSize: number) {
+        this._queue = new BoundedQueue(queueSize);
+    }
+
+    public get queue() : BoundedQueue {
+        return this._queue;
+    }
+
+    add(msg: Message): void {
+        this._queue.enqueue(msg);
+        console.log("Publisher %s is adding message %s to queue...", this.name, msg.value);
+    }
+}
+class BrokerSubscriber {
+    private _queue: BoundedQueue;
+
+    constructor(public name: string, queueSize: number) {
+        this._queue = new BoundedQueue(queueSize);
+    }
+
+    public get queue() : BoundedQueue {
+        return this._queue;
+    }
+
+    async read() {
+        while (true) {
+            let msg = await this._queue.dequeue().catch((err) => { console.log(err); });
+            if (msg) {
+                console.log("Subscriber %s is removing message %s from queue...", this.name, msg.value); // Success!
+            }
+        }
+    }
+}
+class Registry {
+    private subscribers: { [key: string]: BrokerSubscriber } = {};
+
+    public addPerson(subscriber: BrokerSubscriber): void {
+        this.subscribers[subscriber.name] = subscriber;
+    }
+
+    public getPerson(id: string): BrokerSubscriber {
+        return this.subscribers[id];
+    }
+}
 class Broker {
-    queues: any = {};
+    subscriptions: { [publisher: string]: string[] } = {}; //Publisher id -> [Subscriber id, Subscriber id, ...]
 
-    constructor(public name: string, public registry: Registry) {
+    constructor(public registry: Registry) {}
+
+    public register(subscriber: BrokerSubscriber, publisher: string): void {
+        if(publisher in this.subscriptions) {
+            this.subscriptions[publisher].push(subscriber.name);
+        } else {
+            this.subscriptions[publisher] = [subscriber.name];
+        }
+
+        this.registry.addPerson(subscriber);
     }
 
-    public assignQueues() {
-        this.registry.getPublishers().forEach(publisher => this.queues[publisher.name] = new UnboundedQueue());      // Assign a fresh queue to each publisher.
-        this.registry.getSubscribers().forEach(subscriber => this.queues[subscriber.name] = new UnboundedQueue());   // Assign a fresh queue to each subscriber.
-    }
+    public async sendMsg(publisher: BrokerPublisher, msg: Message) : Promise<void> {
+        let pubQueue: BoundedQueue = publisher.queue;
+        let subQueues: BoundedQueue[] = publisher.name in this.subscriptions ?
+            this.subscriptions[publisher.name].map(subName => this.registry.getPerson(subName).queue) : [];
 
-    public enqueueMessage(publisher: Publisher, message: Message) {
-        this.queues[publisher.name].enqueue(message);
-    }
+        if(subQueues.length == 0) {
+            console.log(publisher.name + " has no subscriber...");
+            publisher.add(msg);       
+        }
+
+        let allEnqueueSub: Promise<void>[] = []; //Promise para enqueue que ocorrera na queue dos subscribers
+
+        subQueues.forEach((queue: BoundedQueue) => {
+            allEnqueueSub.push(queue.enqueue(msg));
+        })
+
+        //retirar da queue do publisher depois de os subscribers terem a msg na sua queue
+        Promise.all(allEnqueueSub).then(_ => pubQueue.dequeue); 
+        
+        //o que esta antes e a promise de que a msg vai ser tirada da queue do publisher
+        //so no final da funcao e que pomos efectivamente a msg na queue do publisher
+        return pubQueue.enqueue(msg);
+
+    // public assignQueues() {
+    //     this.registry.publishers.forEach(publisher => this.queues[publisher.name] = new UnboundedQueue());      // Assign a fresh queue to each publisher.
+    //     this.registry.subscribers.forEach(subscriber => this.queues[subscriber.name] = new UnboundedQueue());   // Assign a fresh queue to each subscriber.
+    // }
+
+    // public enqueueMessage(publisher: Publisher, message: Message) {
+    //     this.queues[publisher.name].enqueue(message);
+    // }
+}
 }
 
 (async () => {
     let registry = new Registry();
-    let publishers = [new Publisher("P1"), new Publisher("P2"), new Publisher("P3")];
-    let subscribers = [new Subscriber("S1"), new Subscriber("S2"), new Subscriber("S3")];
-    
+    // let publishers = [new Publisher("P1"), new Publisher("P2"), new Publisher("P3")];
+    // let subscribers = [new Subscriber("S1"), new Subscriber("S2"), new Subscriber("S3")];
+
     // Register all users on the registry.
-    [...publishers, ...subscribers].forEach(user => registry.addUser(user));
+    // [...publishers, ...subscribers].forEach(user => registry.addUser(user));
 
     // Initialize the broker once the registry is completed.
-    let broker: Broker = new Broker("B1", registry);
+    // let broker: Broker = new Broker("B1", registry);
 
     // Assign queues to each user.
-    broker.assignQueues();
+    // broker.assignQueues();
 
     // Enqueue messages.
+
+    let publisher1 = new BrokerPublisher("Pub1", 20);
+    let subscriber1 = new BrokerSubscriber("Sub1", 20);
+    let subscriber2 = new BrokerSubscriber("Sub2", 20);
+    let broker = new Broker(registry);
+
+    broker.register(subscriber1, publisher1.name);
+    broker.register(subscriber2, publisher1.name);
+
+    subscriber1.read();
+    subscriber2.read();
+
+    let nMsg: number = 40;
+    while(nMsg > 0) {
+        await broker.sendMsg(publisher1, new Message(nMsg + ": ola"));
+        nMsg--;
+    }
+    
     
     process.exit();
-});
+})();
 
 /**
  * End of 4th Scenario
