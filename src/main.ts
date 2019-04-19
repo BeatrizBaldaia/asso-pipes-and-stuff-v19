@@ -187,56 +187,59 @@ export class UnboundedQueue implements AsyncQueue<Message> {
     }
 }
 
-/**
- * 1st Scenario
- */
+export interface IObserver {
+    receive(msg: Message):void;
+}
 
-/*(async () => {
-     let queue: UnboundedQueue = new UnboundedQueue();
-     let p1: Publisher = new Publisher("P1");
-     let s1: Subscriber = new Subscriber("S1");
-     s1.read(queue);
-     for(let i = 0; i < 5; i++) {
-         p1.add(queue, new Message("ola " + i));
-     }
+/**
+ *  1st Scenario
+ */
+/*
+(async () => {
+    let queue: UnboundedQueue = new UnboundedQueue();
+    let p1: Publisher = new Publisher("P1");
+    let s1: Subscriber = new Subscriber("S1");
+
+    s1.read(queue);
     
-     //process.exit();
-})()*/
-
+    for(let i = 0; i < 5; i++)
+        p1.add(queue, new Message("ola " + i));
+    
+    // By exiting the process immediately, the subscriber won't have enough time to read messages.
+    // process.exit();
+})();
+*/
 /**
- * end of 1st Scenario
+ *  End of 1st Scenario
  */
 
-
 /**
- * 2nd Scenario
+ *  2nd Scenario
  */
-/*(async () => {
+/*
+(async () => {
     let queue: UnboundedQueue = new UnboundedQueue();
     let p1: Publisher = new Publisher("P1");
     let s1: Subscriber = new Subscriber("S1");
     let s2: Subscriber = new Subscriber("S2");
+
     s1.read(queue);
     s2.read(queue);
-    for(let i = 0; i < 5; i++) {
+
+    for(let i = 0; i < 5; i++)
         p1.add(queue, new Message("ola " + i));
-    }
     
     //process.exit();
-})()*/
+})()
+*/
+/**
+ *  End of 2nd Scenario
+ */
 
 /**
- * end of 2nd Scenario
+ *  3rd Scenario
  */
-
-
- /**
- * 3rd Scenario
- */
-
-export interface IObserver{
-    receive(msg: Message):void;
-}
+/*
 
  class Ventilator {
     private observers: IObserver[]
@@ -268,14 +271,79 @@ export interface IObserver{
     v1.addObserver(s1);
     v1.addObserver(s2);
     v1.addObserver(s3);
-    for(let i = 0; i < 5; i++) {
+    
+    for(let i = 0; i < 5; i++)
         p1.add(queue, new Message("ola " + i));
-    }
     
     //process.exit();
 })()
-
+*/
 /**
- * end of 3rd Scenario
+ *  End of 3rd Scenario
  */
 
+/**
+ * 4th Scenario
+ */
+
+class Registry {
+    private publishers: Publisher[] = [];
+    private subscribers: Subscriber[] = [];
+
+    constructor() {
+    }
+
+    public addUser<User>(user: User) {
+        if (user.constructor.name == "Publisher") 
+            this.publishers.push(<Publisher><unknown> user);
+        else
+            this.subscribers.push(<Subscriber><unknown> user);
+    }
+
+    public getPublishers() {
+        return this.publishers;
+    }
+
+    public getSubscribers() {
+        return this.subscribers;
+    }
+}
+
+class Broker {
+    queues: any = {};
+
+    constructor(public name: string, public registry: Registry) {
+    }
+
+    public assignQueues() {
+        this.registry.getPublishers().forEach(publisher => this.queues[publisher.name] = new UnboundedQueue());      // Assign a fresh queue to each publisher.
+        this.registry.getSubscribers().forEach(subscriber => this.queues[subscriber.name] = new UnboundedQueue());   // Assign a fresh queue to each subscriber.
+    }
+
+    public enqueueMessage(publisher: Publisher, message: Message) {
+        this.queues[publisher.name].enqueue(message);
+    }
+}
+
+(async () => {
+    let registry = new Registry();
+    let publishers = [new Publisher("P1"), new Publisher("P2"), new Publisher("P3")];
+    let subscribers = [new Subscriber("S1"), new Subscriber("S2"), new Subscriber("S3")];
+    
+    // Register all users on the registry.
+    [...publishers, ...subscribers].forEach(user => registry.addUser(user));
+
+    // Initialize the broker once the registry is completed.
+    let broker: Broker = new Broker("B1", registry);
+
+    // Assign queues to each user.
+    broker.assignQueues();
+
+    // Enqueue messages.
+    
+    process.exit();
+});
+
+/**
+ * End of 4th Scenario
+ */
