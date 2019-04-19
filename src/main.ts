@@ -239,11 +239,11 @@ export interface IObserver{
 }
 
  class Ventilator {
-    private observers: IObserver[]
-    constructor(public name: string) { this.observers = [] }
+    private observers: IObserver[] = [];
+    constructor(public name: string) { }
     addObserver(ob: IObserver) { this.observers.push(ob)}
-    notifyObservers(msg: Message){
-        this.observers.map((observer) =>  observer.receive(msg));
+    notifyObservers(msg: Message) {
+        this.observers.forEach((observer) =>  observer.receive(msg));
     }
     async read(queue: AsyncQueue<Message>) {
         while (true) {
